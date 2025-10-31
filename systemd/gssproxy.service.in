@@ -1,0 +1,63 @@
+[Unit]
+Description=GSSAPI Proxy Daemon
+After=network.target
+Before=rpc-gssd.service
+
+[Service]
+ConfigurationDirectory=gssproxy
+StateDirectory=gssproxy gssproxy/clients gssproxy/rcache
+StateDirectoryMode=0700
+Environment=KRB5RCACHEDIR=/var/lib/gssproxy/rcache
+ExecStart=@sbindir@/gssproxy -i
+# This can be changed to notify-reload and ExecReload= can be removed once
+#   systemd 253 is common enough
+Type=notify
+ExecReload=/bin/kill -HUP $MAINPID
+
+ProtectSystem=strict
+PrivateDevices=yes
+PrivateNetwork=yes
+PrivateIPC=yes
+# Blocks access to /home which may hold ccaches, also breaks euid mappings
+PrivateUsers=no
+# For now, read-writeable ccaches in /tmp, /root, /home and /run/user are
+# allowed, if you know that no such ccaches are used on your system, you might
+# want to override these defaults with a drop-in (see man systemd.unit(5))
+# like this (stored in e.g. /etc/systemd/system/gssproxy.d/override.conf):
+#   [Service]
+#   PrivateTmp=yes
+#   ProtectHome=tmpfs
+#   ReadWritePaths=
+PrivateTmp=no
+ProtectHome=no
+ReadWritePaths=/root /home /run/user
+# Blocks propagation of hostname on change but when using a keytab, we want to
+# see hostname changes as the server will want to respond only for that name
+ProtectHostname=no
+ProtectClock=yes
+# Does *not* block rw access to /proc/net/rpc/use-gss-proxy
+ProtectKernelTunables=yes
+# Blocks access to /proc/net/rpc/use-gss-proxy and executable name matching
+ProtectProc=default
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_LOCAL
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+PrivateMounts=yes
+# Stricter version:
+# SystemCallFilter=@default @basic-io @file-system @io-event @network-io @signal @ipc @process madvise umask uname
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_DAC_OVERRIDE
+IPAddressDeny=any
+UMask=0177
+
+[Install]
+WantedBy=multi-user.target
