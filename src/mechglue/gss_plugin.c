@@ -2,6 +2,7 @@
 
 #include "gss_plugin.h"
 #include <signal.h>
+#include <sys/auxv.h>
 #include <endian.h>
 #include <gssapi/gssapi_krb5.h>
 
@@ -76,7 +77,21 @@ const gss_OID_desc gssproxy_mech_interposer = {
 static bool enabled(void)
 {
     char *envval;
+    unsigned long auxval;
     bool ret = GSS_ALWAYS_INTERPOSE;
+
+    /* check if this is a "secure" client */
+    auxval = getauxval(AT_SECURE);
+
+    /* in "secure" clients gp_getenv(0 always fails (it uses secure_getenv),
+     * therefore for "secure" clients we check if we can access the per
+     * client secure socket if available */
+    if (auxval != 0) {
+        int check = gpm_sock_check();
+        if (check == 0) {
+            return true;
+        }
+    }
 
     /* avoid looping in the gssproxy daemon by avoiding to interpose
      * any mechanism */
@@ -510,6 +525,7 @@ uint32_t gpp_remote_to_local_ctx(uint32_t *minor, gssx_ctx **remote_ctx,
     free(mech.elements);
     (void)gss_release_buffer(&min, &wrap_token);
     xdr_free((xdrproc_t)xdr_gssx_ctx, (char *)(*remote_ctx));
+    free(*remote_ctx);
     *remote_ctx = NULL;
     return maj;
 }
